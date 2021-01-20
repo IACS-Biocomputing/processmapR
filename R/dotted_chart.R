@@ -4,6 +4,7 @@
 #' @param x Value for plot on x-axis: absolute time or relative time (since start, since start of week, since start of day)
 #' @param sort Ordering of the cases on y-axis: start, end or duration, start_week, start_day
 #' @param color Optional, variable to use for coloring dots. Default is the activity identifier. Use NA for no colors.
+#' @param scale_fill Optional, set color scale
 #' @param units Time units to use on x-axis in case of relative time.
 #' @param plotly Return plotly object
 #' @param add_end_events Whether to add dots for the complete lifecycle event with a different shape.
@@ -13,7 +14,7 @@
 #'
 
 
-dotted_chart <- function(eventlog, x, sort, color, units, add_end_events = F, ...) {
+dotted_chart <- function(eventlog, x, sort, color, color_vector, units, add_end_events = F, ...) {
 	UseMethod("dotted_chart")
 }
 
@@ -109,7 +110,7 @@ configure_x_labs <- function(x, units) {
 			  x == "absolute" ~ "Time")
 }
 
-dotted_chart_plot <- function(data, mapping, x, y, col_vector, col_label, units, add_end_events) {
+dotted_chart_plot <- function(data, mapping, x, y, scale_fill, col_label, units, add_end_events) {
 
 	color <- NULL
 	x_aes <- configure_x_aes(x)
@@ -123,7 +124,12 @@ dotted_chart_plot <- function(data, mapping, x, y, col_vector, col_label, units,
 		theme_light() -> p
 
 	p + geom_point(aes(color = color, shape = "start")) +
-		scale_color_manual(name = col_label, values = col_vector) -> p
+		labs(color = col_label) +
+		scale_fill -> p
+
+	if (is.na(col_label)) {
+		p + theme(legend.position = "none") -> p
+	}
 
 	if (add_end_events) {
 		p + geom_point(aes(x = !!sym(x_aes[[2]]), color = color, shape = "complete", ), ) +
@@ -141,11 +147,6 @@ dotted_chart_plot <- function(data, mapping, x, y, col_vector, col_label, units,
 	p
 }
 
-col_vector <- function() {
-	qual_col_pals = brewer.pal.info[brewer.pal.info$category == 'qual',]
-	unlist(mapply(brewer.pal, qual_col_pals$maxcolors, rownames(qual_col_pals)))
-}
-
 #' @export
 
 
@@ -153,6 +154,7 @@ dotted_chart.eventlog <- function(eventlog,
 								  x = c("absolute","relative","relative_week","relative_day"),
 								  sort = NULL,
 								  color = NULL,
+								  scale_fill = scale_fill_discrete(h = c(0,360) + 15, l = 40),
 								  units = NULL,
 								  add_end_events = F,
 								  ...) {
@@ -180,12 +182,9 @@ dotted_chart.eventlog <- function(eventlog,
 		units <-	match.arg(units, choices = c("weeks","days","hours","mins","secs"))
 	}
 
-
-
-
 	eventlog %>%
 		dotted_chart_data(color, units) %>%
-		dotted_chart_plot(mapping, x, y, col_vector(), ifelse(is.null(color), activity_id(eventlog), color), units, add_end_events = add_end_events)
+		dotted_chart_plot(mapping, x, y, scale_fill, ifelse(is.null(color), activity_id(eventlog), color), units, add_end_events = add_end_events)
 }
 
 #' @describeIn dotted_chart Dotted chart for grouped event log
@@ -195,6 +194,7 @@ dotted_chart.grouped_eventlog <- function(eventlog,
 										  x = c("absolute","relative","relative_week","relative_day"),
 										  sort = NULL,
 										  color = NULL,
+										  scale_fill = scale_fill_discrete(h = c(0,360) + 15, l = 40),
 										  units = NULL,
 										  add_end_events = F,
 										  ...) {
@@ -217,6 +217,7 @@ dotted_chart.grouped_eventlog <- function(eventlog,
 		y <-	match.arg(sort, choices = c("start","end","duration", "start_week","start_day"))
 	}
 
+
 	if(is.null(units)) {
 		units <-	switch(x,
 						"absolute" = "weeks",
@@ -230,7 +231,7 @@ dotted_chart.grouped_eventlog <- function(eventlog,
 
 	eventlog %>%
 		dotted_chart_data(color, units) %>%
-		dotted_chart_plot(mapping, x, y, col_vector(), ifelse(is.null(color), activity_id(eventlog), color), units, add_end_events = add_end_events) +
+		dotted_chart_plot(mapping, x, y, scale_fill, ifelse(is.null(color), activity_id(eventlog), color), units, add_end_events = add_end_events) +
 		facet_grid(as.formula(paste(c(paste(groups, collapse = "+"), "~." ), collapse = "")), scales = "free_y", space = "free")
 
 }
@@ -309,8 +310,9 @@ plotly_dotted_chart <- function(eventlog,
 								x = c("absolute","relative","relative_week","relative_day"),
 								sort = c("start","end","duration", "start_week","start_day"),
 								color = NULL,
+								scale_fill = scale_fill_discrete(h = c(0,360) + 15, l = 40),
 								units = c("weeks","days","hours","mins","secs"),
 								...) {
-	dotted_chart(eventlog, x, sort, color, units) %>%
+	dotted_chart(eventlog, x, sort, color, scale_fill, units) %>%
 		ggplotly
 }
